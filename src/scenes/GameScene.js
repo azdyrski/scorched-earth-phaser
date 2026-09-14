@@ -38,13 +38,16 @@ export class GameScene extends Phaser.Scene {
         // 4. Particle Emitter for Explosions & Missile Trails
         this.createParticleEffects();
 
-        // 5. Build HUD UI (Angle slider, Power Bar, Fire Button, Turn Banner)
+        // 5. Build HUD UI (Angle readout, Power Bar, Fire Button, Turn Banner)
         this.createHUD();
 
         // 6. Keyboard Controls Setup
         this.createKeyboardControls();
 
-        // 7. Graphics layer for trajectory preview
+        // 7. Click & drag on the play field to aim
+        this.createAimingControls();
+
+        // 8. Graphics layer for trajectory preview
         this.trajectoryGfx = this.add.graphics();
 
         // Initial setup for Player 1 turn
@@ -285,92 +288,28 @@ export class GameScene extends Phaser.Scene {
 
         // --- CONTROLS IN HUD ---
 
-        // 1. Angle Control (Slider & Labels)
+        // 1. Angle Readout (angle is now set by clicking & dragging on the play field)
         this.add.text(120, height - 85, 'ANGLE:', {
             fontFamily: 'Arial, sans-serif', fontSize: '15px', fontStyle: 'bold', color: '#94a3b8'
         });
 
-        this.angleValText = this.add.text(180, height - 85, '45°', {
+        this.angleValText = this.add.text(190, height - 85, '45°', {
             fontFamily: 'Arial, sans-serif', fontSize: '16px', fontStyle: 'bold', color: '#38bdf8'
         });
 
-        // Angle Slider Track
-        this.angleTrackLeft = 120;
-        this.angleTrackWidth = 240;
-        this.angleTrackY = height - 45;
-
-        const angleTrack = this.add.graphics();
-        angleTrack.fillStyle(0x334155, 1);
-        angleTrack.fillRoundedRect(this.angleTrackLeft, this.angleTrackY - 6, this.angleTrackWidth, 12, 6);
-
-        // Draggable Angle Handle
-        this.angleHandle = this.add.container(this.angleTrackLeft + (45 / 180) * this.angleTrackWidth, this.angleTrackY);
-        const handleGfx = this.add.graphics();
-        handleGfx.fillStyle(0x38bdf8, 1);
-        handleGfx.fillCircle(0, 0, 12);
-        handleGfx.lineStyle(2, 0xffffff, 1);
-        handleGfx.strokeCircle(0, 0, 12);
-        this.angleHandle.add(handleGfx);
-        this.angleHandle.setSize(24, 24);
-        this.angleHandle.setInteractive({ useHandCursor: true, draggable: true });
-
-        this.input.setDraggable(this.angleHandle);
-
-        this.angleHandle.on('drag', (pointer, dragX) => {
-            if (this.isFiring || (this.gameMode === '1p' && this.currentPlayer === 2)) return;
-            const clampedX = Phaser.Math.Clamp(dragX, this.angleTrackLeft, this.angleTrackLeft + this.angleTrackWidth);
-            this.angleHandle.x = clampedX;
-            const norm = (clampedX - this.angleTrackLeft) / this.angleTrackWidth;
-            const angle = Math.round(norm * 180);
-            this.playerStates[this.currentPlayer].angle = angle;
-            this.updateHUDValues();
-        });
-
-        // 2. Draggable Power Bar (Requirement: Draggable bar corresponding to power value)
-        this.add.text(430, height - 85, 'POWER:', {
+        // 2. Power Readout (power is set via the vertical bar next to the active tank)
+        this.add.text(120, height - 55, 'POWER:', {
             fontFamily: 'Arial, sans-serif', fontSize: '15px', fontStyle: 'bold', color: '#94a3b8'
         });
 
-        this.powerValText = this.add.text(490, height - 85, '550', {
+        this.powerValText2 = this.add.text(190, height - 55, '550', {
             fontFamily: 'Arial, sans-serif', fontSize: '16px', fontStyle: 'bold', color: '#facc15'
         });
 
-        this.powerTrackLeft = 430;
-        this.powerTrackWidth = 260;
-        this.powerTrackY = height - 45;
+        // 3. Vertical Power Bar next to the active player's turret
+        this.createPowerBar();
 
-        // Power Bar Background
-        const powerTrackBg = this.add.graphics();
-        powerTrackBg.fillStyle(0x334155, 1);
-        powerTrackBg.fillRoundedRect(this.powerTrackLeft, this.powerTrackY - 8, this.powerTrackWidth, 16, 8);
-
-        // Power Fill Bar
-        this.powerFillGfx = this.add.graphics();
-
-        // Draggable Power Handle
-        this.powerHandle = this.add.container(this.powerTrackLeft + ((550 - 100) / 900) * this.powerTrackWidth, this.powerTrackY);
-        const pHandleGfx = this.add.graphics();
-        pHandleGfx.fillStyle(0xfacc15, 1);
-        pHandleGfx.fillRoundedRect(-8, -14, 16, 28, 4);
-        pHandleGfx.lineStyle(2, 0xffffff, 1);
-        pHandleGfx.strokeRoundedRect(-8, -14, 16, 28, 4);
-        this.powerHandle.add(pHandleGfx);
-        this.powerHandle.setSize(20, 28);
-        this.powerHandle.setInteractive({ useHandCursor: true, draggable: true });
-
-        this.input.setDraggable(this.powerHandle);
-
-        this.powerHandle.on('drag', (pointer, dragX) => {
-            if (this.isFiring || (this.gameMode === '1p' && this.currentPlayer === 2)) return;
-            const clampedX = Phaser.Math.Clamp(dragX, this.powerTrackLeft, this.powerTrackLeft + this.powerTrackWidth);
-            this.powerHandle.x = clampedX;
-            const norm = (clampedX - this.powerTrackLeft) / this.powerTrackWidth;
-            const power = Math.round(100 + norm * 900);
-            this.playerStates[this.currentPlayer].power = power;
-            this.updateHUDValues();
-        });
-
-        // 3. FIRE BUTTON
+        // 4. FIRE BUTTON
         const fireBtnX = 780;
         const fireBtnY = height - 50;
 
@@ -397,9 +336,81 @@ export class GameScene extends Phaser.Scene {
         });
 
         // Quick Controls Helper Label
-        this.add.text(870, height - 55, 'Keyboard: UP/DN = Angle | LEFT/RIGHT = Power | SPACE = Fire', {
+        this.add.text(870, height - 55, 'Drag on the battlefield to aim | Drag the bar at your tank = Power | SPACE = Fire', {
             fontFamily: 'Arial, sans-serif', fontSize: '12px', color: '#64748b', wordWrap: { width: 380 }
         });
+    }
+
+    createPowerBar() {
+        this.powerBarHeight = 130;
+
+        this.powerBarTrackGfx = this.add.graphics();
+        this.powerFillGfx = this.add.graphics();
+
+        this.powerHandle = this.add.container(0, 0);
+        const pHandleGfx = this.add.graphics();
+        pHandleGfx.fillStyle(0xfacc15, 1);
+        pHandleGfx.fillRoundedRect(-16, -8, 32, 16, 4);
+        pHandleGfx.lineStyle(2, 0xffffff, 1);
+        pHandleGfx.strokeRoundedRect(-16, -8, 32, 16, 4);
+        this.powerHandle.add(pHandleGfx);
+        this.powerHandle.setSize(32, 16);
+        this.powerHandle.setInteractive({ useHandCursor: true, draggable: true });
+
+        this.input.setDraggable(this.powerHandle);
+
+        this.powerHandle.on('drag', (pointer, dragX, dragY) => {
+            if (this.isFiring || (this.gameMode === '1p' && this.currentPlayer === 2)) return;
+            const clampedY = Phaser.Math.Clamp(dragY, this.powerBarTop, this.powerBarTop + this.powerBarHeight);
+            this.powerHandle.y = clampedY;
+            const norm = 1 - (clampedY - this.powerBarTop) / this.powerBarHeight;
+            const power = Math.round(100 + norm * 900);
+            this.playerStates[this.currentPlayer].power = power;
+            this.updateHUDValues();
+        });
+    }
+
+    createAimingControls() {
+        this.isAiming = false;
+
+        this.input.on('pointerdown', (pointer) => {
+            if (this.isFiring || this.isGameOver) return;
+            if (this.gameMode === '1p' && this.currentPlayer === 2) return;
+            if (pointer.y >= this.scale.height - 100) return; // ignore clicks in the HUD panel
+            if (this.input.hitTestPointer(pointer).length > 0) return; // let the power handle/buttons handle their own input
+
+            this.isAiming = true;
+            this.updateAimAngle(pointer);
+        });
+
+        this.input.on('pointermove', (pointer) => {
+            if (!this.isAiming) return;
+            if (!pointer.isDown) {
+                this.isAiming = false;
+                return;
+            }
+            this.updateAimAngle(pointer);
+        });
+
+        this.input.on('pointerup', () => {
+            this.isAiming = false;
+        });
+    }
+
+    updateAimAngle(pointer) {
+        if (this.isFiring || this.isGameOver) return;
+        if (this.gameMode === '1p' && this.currentPlayer === 2) return;
+
+        const isP1 = this.currentPlayer === 1;
+        const tankX = isP1 ? this.p1X : this.p2X;
+        const tankY = isP1 ? this.p1Container.y - 12 : this.p2Container.y - 12;
+
+        const dx = pointer.x - tankX;
+        const dy = pointer.y - tankY;
+        const angle = Math.round(Phaser.Math.Clamp(Phaser.Math.RadToDeg(-Math.atan2(dy, dx)), 0, 180));
+
+        this.playerStates[this.currentPlayer].angle = angle;
+        this.updateHUDValues();
     }
 
     createKeyboardControls() {
@@ -411,26 +422,42 @@ export class GameScene extends Phaser.Scene {
         this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     }
 
+    updatePowerBarPosition() {
+        const isP1 = this.currentPlayer === 1;
+        const tankX = isP1 ? this.p1X : this.p2X;
+        const tankY = isP1 ? this.p1Container.y : this.p2Container.y;
+        const offsetX = isP1 ? 50 : -50;
+
+        this.powerBarX = tankX + offsetX;
+        this.powerBarBottom = Math.max(tankY - 20, 220);
+        this.powerBarTop = this.powerBarBottom - this.powerBarHeight;
+
+        const barColor = isP1 ? 0x00d2ff : 0xff4500;
+        this.powerBarTrackGfx.clear();
+        this.powerBarTrackGfx.fillStyle(0x0f172a, 0.75);
+        this.powerBarTrackGfx.fillRoundedRect(this.powerBarX - 11, this.powerBarTop - 4, 22, this.powerBarHeight + 8, 8);
+        this.powerBarTrackGfx.fillStyle(0x334155, 1);
+        this.powerBarTrackGfx.fillRoundedRect(this.powerBarX - 8, this.powerBarTop, 16, this.powerBarHeight, 6);
+        this.powerBarTrackGfx.lineStyle(2, barColor, 0.9);
+        this.powerBarTrackGfx.strokeRoundedRect(this.powerBarX - 8, this.powerBarTop, 16, this.powerBarHeight, 6);
+    }
+
     updateHUDValues() {
         const state = this.playerStates[this.currentPlayer];
         this.angleValText.setText(`${state.angle}°`);
-        this.powerValText.setText(`${state.power}`);
+        this.powerValText2.setText(`${state.power}`);
 
-        // Update angle handle position
-        const angleNorm = state.angle / 180;
-        this.angleHandle.x = this.angleTrackLeft + angleNorm * this.angleTrackWidth;
+        this.updatePowerBarPosition();
 
-        // Update power handle position
         const powerNorm = (state.power - 100) / 900;
-        this.powerHandle.x = this.powerTrackLeft + powerNorm * this.powerTrackWidth;
 
-        // Update Power Fill Graphics
+        this.powerHandle.x = this.powerBarX;
+        this.powerHandle.y = this.powerBarBottom - powerNorm * this.powerBarHeight;
+
         this.powerFillGfx.clear();
-        this.powerFillGfx.fillGradientStyle(0x38bdf8, 0xfacc15, 0xef4444, 0xef4444, 1);
-        this.powerFillGfx.fillRoundedRect(
-            this.powerTrackLeft, this.powerTrackY - 6,
-            Math.max(12, powerNorm * this.powerTrackWidth), 12, 6
-        );
+        this.powerFillGfx.fillGradientStyle(0xef4444, 0xef4444, 0xfacc15, 0x38bdf8, 1);
+        const fillHeight = Math.max(8, powerNorm * this.powerBarHeight);
+        this.powerFillGfx.fillRoundedRect(this.powerBarX - 8, this.powerBarBottom - fillHeight, 16, fillHeight, 6);
 
         this.updateBarrels();
         this.drawTrajectoryPreview();
@@ -555,25 +582,28 @@ export class GameScene extends Phaser.Scene {
         let chosenAngle = Math.round(idealAngle + (Math.random() - 0.5) * 12 * errorFactor);
         chosenAngle = Phaser.Math.Clamp(chosenAngle, 95, 175);
 
+        const prevAngle = this.playerStates[2].angle;
+        const prevPower = this.playerStates[2].power;
         this.playerStates[2].angle = chosenAngle;
         this.playerStates[2].power = chosenPower;
 
-        // Visually animate CPU adjusting its controls before firing
+        // Visually animate the CPU adjusting its aim/power before firing
+        const proxy = { angle: prevAngle, power: prevPower };
         this.tweens.add({
-            targets: this.angleHandle,
-            x: this.angleTrackLeft + (chosenAngle / 180) * this.angleTrackWidth,
+            targets: proxy,
+            angle: chosenAngle,
+            power: chosenPower,
             duration: 800,
             ease: 'Power2',
-            onUpdate: () => this.updateHUDValues()
-        });
-
-        this.tweens.add({
-            targets: this.powerHandle,
-            x: this.powerTrackLeft + ((chosenPower - 100) / 900) * this.powerTrackWidth,
-            duration: 800,
-            ease: 'Power2',
-            onUpdate: () => this.updateHUDValues(),
+            onUpdate: () => {
+                this.playerStates[2].angle = Math.round(proxy.angle);
+                this.playerStates[2].power = Math.round(proxy.power);
+                this.updateHUDValues();
+            },
             onComplete: () => {
+                this.playerStates[2].angle = chosenAngle;
+                this.playerStates[2].power = chosenPower;
+                this.updateHUDValues();
                 this.time.delayedCall(400, () => {
                     this.fireMissile();
                 });
